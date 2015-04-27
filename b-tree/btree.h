@@ -5,12 +5,19 @@
 #include <cstring>
 #include <cassert>
 #include <cstddef>
+#include <iostream>
+#include <algorithm>
+#include <iterator>
+#include <string>
+#include <climits>
+#include <limits>
 
 using std::memmove;
 using std::memcpy;
 
 #define PAGE_SIZE   4096
-#define T           85
+//#define T           85
+#define T           10
 #define BNODE_KEY_SIZE  (2*T-1)
 #define BNODE_CHILDREN_SIZE (2*T)
 
@@ -35,8 +42,6 @@ size_t search_lower_bound(size_t* values, size_t len, size_t target) {
         size_t mid = begin + (end - begin) / 2;
         if(values[mid] < target)
             begin = mid + 1;
-         else if(values[mid] == target)
-            break;
          else
             end = mid;
     }
@@ -78,7 +83,7 @@ size_t b_tree_create() {
     sim_new_node(&node_addr, &node_id);
     sim_release_node(node_id, node_addr);
     assert(node_addr!=nullptr && node_id!=0);
-    assert(node_addr->count==0 && node_addr->is_leaf==false);
+    assert(node_addr->count==0 && node_addr->is_leaf==true);
     return node_id;
 }
 
@@ -88,7 +93,6 @@ void b_tree_split_child(BTreeNode* node_addr, int pos) {
     BTreeNode* child_addr = sim_get_node(child_id);
 
     assert(child_addr->count == BNODE_KEY_SIZE);
-    assert(!child_addr->is_leaf);
 
     BTreeNode* sib_addr;
     size_t sib_id;
@@ -109,6 +113,7 @@ void b_tree_split_child(BTreeNode* node_addr, int pos) {
     node_addr->keys[pos] = child_addr->keys[T-1];
     node_addr->values[pos] = child_addr->values[T-1];
     node_addr->children[pos+1] = sib_id;
+    node_addr->count += 1;
 
     sim_release_node(sib_id, sib_addr);
     sim_release_node(child_id, child_addr);
@@ -126,6 +131,7 @@ bool b_tree_insert(size_t* p_node_id, size_t key, size_t value) {
         size_t new_id;
         sim_new_node(&new_addr, &new_id);
         new_addr->children[0] = node_id;
+        new_addr->is_leaf = false;
         b_tree_split_child(new_addr, 0);
         sim_release_node(node_id, node_addr);
 
@@ -144,14 +150,42 @@ bool b_tree_insert(size_t* p_node_id, size_t key, size_t value) {
         BTreeNode* next_addr = sim_get_node(next_id);
         // 下降前确保该子节点的keys数没满。
         // 根据算法流程，当前节点总是没有满的。
-        if(next_addr->count==BNODE_KEY_SIZE)
+        if(next_addr->count==BNODE_KEY_SIZE) {
             b_tree_split_child(node_addr, pos);
+            assert(pos<node_addr->count);
+            // children[pos]节点分裂后的keys[pos]大小会变，且是变小。
+            // split之前： node_addr->keys[pos] > key
+            // split之后： keys[pos] == key || keys[pos] < key
+            // 
+            // 更好的处理办法就是split之后，下次还是循环当前层，而不直接下降。
+            if(node_addr->keys[pos]<key) {
+                pos += 1;
+                assert(pos>=node_addr->count || key<=node_addr->keys[pos]);
+                if(pos>=node_addr->count || key<node_addr->keys[pos]) {
+                    size_t sib_id = node_addr->children[pos];
+                    BTreeNode* sib_addr = sim_get_node(sib_id);
+                    sim_release_node(next_id, next_addr);
+                    next_id = sib_id;
+                    next_addr = sib_addr;
+                } else { // key==node_addr->keys[pos]
+                    sim_release_node(next_id, next_addr);
+                    break;
+                }
+            } else if(node_addr->keys[pos]==key) {
+                sim_release_node(next_id, next_addr);
+                break;
+            }
+        }
         sim_release_node(node_id, node_addr);
         node_id = next_id;
         node_addr = next_addr;
     }while(node_id);
 
-    assert(node_addr->is_leaf);
+    // 走到这里有三种可能：
+    //  1 叶节点，无重复
+    //  2 叶节点，有重复
+    //  3 内部节点，必是重复
+    assert(node_addr->is_leaf || (!node_addr->is_leaf && node_addr->keys[pos]==key));
     bool is_insert = true;
     if(pos<node_addr->count && node_addr->keys[pos]==key) {
         node_addr->values[pos] = value;
@@ -235,9 +269,9 @@ void __b_tree_merge_with_right_sib(BTreeNode* parent, size_t child_pos, BTreeNod
 
     right_sib_addr->count = 0;
 
-    memmove(parent->keys + child_pos, parent->keys + child_pos + 1, parent->count - child_pos - 1);
-    memmove(parent->values + child_pos, parent->values + child_pos + 1, parent->count - child_pos - 1);
-    memmove(parent->children + child_pos + 1, parent->children + child_pos + 2, parent->count - child_pos - 1);
+    memmove(parent->keys + child_pos, parent->keys + child_pos + 1, (parent->count - child_pos - 1)*sizeof(size_t));
+    memmove(parent->values + child_pos, parent->values + child_pos + 1, (parent->count - child_pos - 1)*sizeof(size_t));
+    memmove(parent->children + child_pos + 1, parent->children + child_pos + 2, (parent->count - child_pos - 1)*sizeof(size_t));
     parent->count -= 1;
 }
 
@@ -375,6 +409,9 @@ CASE_3_NEXT_LOOP:
             if(pos<node_addr->count && node_addr->keys[pos]==key) {
                 exists = true;
                 if(value) *value = node_addr->values[pos];
+                memmove(node_addr->keys+pos, node_addr->keys+pos+1, (node_addr->count-pos-1)*sizeof(size_t));
+                memmove(node_addr->values+pos, node_addr->values+pos+1, (node_addr->count-pos-1)*sizeof(size_t));
+                node_addr->count -= 1;
             } else {
                 exists = false;
             }
@@ -408,6 +445,7 @@ CASE_3_NEXT_LOOP:
                 // here.
                 key = sub_key;
                 value = nullptr;
+                sim_release_node(node_id, node_addr);
                 node_addr = left_child_addr;
                 node_id = left_child_id;
 
@@ -429,6 +467,7 @@ CASE_3_NEXT_LOOP:
                 // here.
                 key = sub_key;
                 value = nullptr;
+                sim_release_node(node_id, node_addr);
                 node_addr = right_child_addr;
                 node_id = right_child_id;
 
@@ -438,18 +477,24 @@ CASE_3_NEXT_LOOP:
 
             // 2c
             // 左右子节点合并。
-            if(!deleted) {
-                assert(left_child_id!=0 && right_child_id!=0);
-                // delete & merge
-                __b_tree_merge_with_right_sib(node_addr, pos, left_child_addr, right_child_addr);
-                sim_release_node(right_child_id, right_child_addr);
-                sim_delete_node(right_child_id);
-                right_child_id = 0;
-                right_child_addr = nullptr;
-
-                node_addr = left_child_addr;
-                node_id = left_child_id;
+            assert(!deleted);
+            assert(left_child_id!=0 && right_child_id!=0);
+            // delete & merge
+            __b_tree_merge_with_right_sib(node_addr, pos, left_child_addr, right_child_addr);
+            sim_release_node(right_child_id, right_child_addr);
+            sim_delete_node(right_child_id);
+            right_child_id = 0;
+            right_child_addr = nullptr;
+            if(node_addr->count==0) {
+                assert(node_id==*p_node_id);
+                sim_release_node(node_id, node_addr);
+                sim_delete_node(node_id);
+                *p_node_id = left_child_id;
+            } else {
+                sim_release_node(node_id, node_addr);
             }
+            node_addr = left_child_addr;
+            node_id = left_child_id;
         }
     }while(true);
 
@@ -480,4 +525,76 @@ bool b_tree_search(size_t node_id, size_t key, size_t* value) {
     return exist;
 }
 
+void test_print_btree(size_t root_id, int level=0, bool is_root=true) {
+    using std::cout;
+    using std::endl;
+    using std::string;
+    using std::copy;
+    using std::ostream_iterator;
+
+    if(!root_id) return;
+
+    BTreeNode* root = sim_get_node(root_id);
+    if(is_root) {
+        cout << string(7, '-') << " btree " << string(7, '-') << endl;
+        cout << "T: " << T << endl;
+    }
+
+    int indent = level;
+    cout << string(indent*3, ' ');
+    cout << " count: " << root->count;
+    cout << " leaf: " << root->is_leaf;
+    cout << " key: ";
+    copy(root->keys, root->keys+root->count, ostream_iterator<size_t>(cout, ","));
+    cout << endl;
+
+    if(!root->is_leaf) {
+        for(int i=0; i<=root->count; ++i) {
+            test_print_btree(root->children[i], level+1, false);
+        }
+    }
+    sim_release_node(root_id, root);
+
+    if(is_root) {
+        cout << string(21, '-') << endl;
+    }
+
+}
+
+#define SIZE_T_MIN  0
+#define SIZE_T_MAX  (~static_cast<size_t>(0x1))
+void check_btree_restrict(size_t node_id, int is_root=true, 
+        size_t lower_bound = SIZE_T_MIN,
+        size_t upper_bound = SIZE_T_MAX) {
+
+    BTreeNode* node_addr = sim_get_node(node_id);
+    // count(keys) belongs to [T-1, 2T-1], except root
+    assert( (!is_root && node_addr->count >= T-1 && node_addr->count <=2*T-1)
+            ||
+            (is_root && ((node_addr->count==0 && node_addr->is_leaf) || (node_addr->count > 0))));
+
+    for(int i=0; i<node_addr->count; ++i) {
+        assert(node_addr->keys[i] >= lower_bound && node_addr->keys[i] <= upper_bound);
+    }
+
+    // can be stronger.
+    assert( (!is_root && !node_addr->is_leaf 
+                && node_addr->keys[0]>SIZE_T_MIN 
+                && node_addr->keys[node_addr->count-1]<SIZE_T_MAX)
+            || is_root
+            || node_addr->is_leaf);
+             
+    if(!node_addr->is_leaf) {
+        for(int i=0; i<=node_addr->count; ++i) {
+            size_t child_lower_bound = lower_bound;
+            size_t child_upper_bound = upper_bound;
+            if(i>0)
+                child_lower_bound = node_addr->keys[i-1]+1;
+            if(i<node_addr->count)
+                child_upper_bound = node_addr->keys[i]-1;
+            check_btree_restrict(node_addr->children[i], false, child_lower_bound, child_upper_bound);
+        }
+    }
+    sim_release_node(node_id, node_addr);
+}
 #endif //  __B_TREE_HEADER__
