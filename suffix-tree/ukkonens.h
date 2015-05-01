@@ -105,10 +105,10 @@ public:
         memcpy(const_cast<char*>(buffer)+len, str, str_len);
 
         while(len < total_len) {
-            printf("insert pos:%d char%c\n", len, buffer[len]);
+            //printf("insert pos:%d char%c\n", len, buffer[len]);
             __append_char(buffer[len], len);
             len += 1;
-            print_tree();
+            //print_tree();
         }
         return OK;
     }

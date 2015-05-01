@@ -15,7 +15,7 @@ void test_case(const string& str, const string& pattern) {
     cout << str << endl;
     cout << pattern << endl;
     tree.append_str(str.c_str());
-    //tree.print_tree();
+    tree.print_tree();
     cout << tree.search_pattern(pattern.c_str()) << endl;
     return;
     for(int i=0; i<str.size(); ++i) {
@@ -31,11 +31,14 @@ int main(int argc, char** argv) {
     string a2 = "abcabxabcd";
     string a3 = "abcabxabcdbcabyabcabxy";
     string a4 = "1112121121112";
+    string a5 = "APCFALZ";
     string bb = "ippi";
 
     test_case(a4, bb);
+    return 0;
     test_case(a2, bb);
     test_case(a1, bb);
+    test_case(a5, bb);
 
     string paper = "As is the case in radio frequency transmission systems, multipath propagation \
 effects are important for wireless optical networks. The power launched from \
