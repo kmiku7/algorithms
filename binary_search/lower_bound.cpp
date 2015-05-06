@@ -4,6 +4,8 @@
 
 using namespace std;
 
+
+// manber 1993
 int my_lower_bound(int* nums, size_t len, int target) {
     if(len<=0 || target<=nums[0])
         return 0;
