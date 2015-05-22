@@ -1,6 +1,7 @@
 #ifndef __BINOMINAL_HEAP_H__
 #define __BINOMINAL_HEAP_H__
 #include <stdlib.h>
+#include <stdio.h>
 
 typedef int BH_KEY;
 typedef void*   BH_VALUE;
@@ -28,6 +29,11 @@ BH_NODE bh_insert(BH_HEAD heap, BH_KEY key, BH_VALUE value);
 BH_HEAD bh_merge(BH_HEAD left, BH_HEAD right);
 void bh_decrease_key(BH_HEAD heap, BH_NODE node, BH_KEY key);
 
-void print_tree(BH_HEAD heap);
+// preorder print.
+// simlar to morris threaded traverse, 
+// but we dont't set node->sibling(use as node->right), 
+// because the successor is same as node->parent.
+// And we will check the parent of every node which on right edge of NODE->child, is equal to the NODE.
+void bh_preorder_print_heap(BH_HEAD heap, FILE* fout);
 
 #endif // __BINOMINAL_HEAP_H__

@@ -31,20 +31,9 @@ BH_NODE __bh_node_merge(BH_HEAD left, BH_HEAD right) {
     BH_NODE right_list = right->sibling;
     right->sibling = NULL;
 
-    BH_NODE merged_list = NULL;
-    if(left_list) {
-        merged_list = left_list;
-        left_list = left_list->sibling;
-    } else if(right_list) {
-        merged_list = right_list;
-        right_list = right_list->sibling;
-    } else {
-        return NULL;
-    }
-
-    BH_NODE prev_node = merged_list;
+    BH_NODE prev_node = left;
     while(left_list && right_list) {
-        if(left_list->key < right_list->key) {
+        if(left_list->rank < right_list->rank) {
             prev_node->sibling = left_list;
             prev_node = left_list;
             left_list = left_list->sibling;
@@ -55,7 +44,9 @@ BH_NODE __bh_node_merge(BH_HEAD left, BH_HEAD right) {
         }
     }
     prev_node->sibling = left_list ? left_list : right_list;
-    return merged_list;
+    BH_NODE list_head = left->sibling;
+    left->sibling = NULL;
+    return list_head;
 }
 
 //public
@@ -113,14 +104,20 @@ BH_VALUE bh_delete_min(BH_HEAD heap) {
         p_next_node = p_next_node->sibling;
     }
 
+    // binominal tree的兄弟节点按照rank递减排序，根链按照递增排序。
+    // 因此tree->heap的时候需要reverse(node->sibling)
     BH_NODE sub_heap = min_node;
     min_node_prev_sib->sibling = min_node->sibling;
     sub_heap->sibling = sub_heap->child;
     sub_heap->child = NULL;
     BH_NODE curr_node = sub_heap->sibling;
+    sub_heap->sibling = NULL;
     while(curr_node){
         curr_node->parent = NULL;
-        curr_node = curr_node->sibling;
+        BH_NODE next_node = curr_node->sibling;
+        curr_node->sibling = sub_heap->sibling;
+        sub_heap->sibling = curr_node;
+        curr_node = next_node;
     }
 
     BH_HEAD tmp_heap = bh_merge(heap, sub_heap);
@@ -141,6 +138,7 @@ BH_NODE bh_insert(BH_HEAD heap, BH_KEY key, BH_VALUE value) {
     tmp_heap->sibling = new_node;
     BH_HEAD merged_heap = bh_merge(heap, tmp_heap);
     *heap = *merged_heap;
+    __bh_release_node(tmp_heap, NULL);
     __bh_release_node(merged_heap, NULL);
     return new_node;
 }
@@ -162,20 +160,20 @@ BH_HEAD bh_merge(BH_HEAD left, BH_HEAD right) {
             || (next_node->sibling!=NULL && next_node->sibling->rank==next_node->rank)){
             prev_node = curr_node;
             curr_node = next_node;
-        } else if(curr_node->rank < next_node->rank) {
+        } else if(curr_node->key < next_node->key) {
             curr_node->sibling = next_node->sibling;
             next_node->sibling = curr_node->child;
             next_node->parent = curr_node;
             curr_node->child = next_node;
             curr_node->rank += 1;
         } else {
-            // curr_node->rank > next_node->rank
+            // curr_node->key > next_node->key
             curr_node->sibling = next_node->child;
             curr_node->parent = next_node;
             next_node->child = curr_node;
             prev_node->sibling = next_node;
+            next_node->rank += 1;
             curr_node = next_node;
-            curr_node->rank += 1;
         }
     }
     return new_heap;
@@ -194,3 +192,37 @@ void bh_decrease_key(BH_HEAD heap, BH_NODE node, BH_KEY key) {
     node->value = value;
 }
 
+void __bh_print_node(BH_NODE node, FILE* fout) {
+    fprintf(fout, "(id:%p, r:%u, k:%d, v:%p, p:%p, c:%p, s:%p)\n", 
+        node, node->rank, node->key, node->value, node->parent, node->child, node->sibling);
+}
+
+void bh_preorder_print_heap(BH_HEAD heap, FILE* fout) {
+    assert(fout != NULL);
+    if(heap == NULL) {
+        fprintf(fout, "INVALID\n");
+        return;
+    }
+
+    fprintf(fout, "HEAP(%p)\n", heap);
+
+    BH_NODE curr = heap->sibling;
+    while(curr != NULL) {
+        __bh_print_node(curr, fout);
+        BH_NODE child = curr->child;
+        if(child != NULL) {
+            while(child!=NULL) {
+                //assert(child->parent == curr);
+                child = child->sibling;
+            }
+            curr = curr->child;
+        } else if(curr->sibling != NULL) {
+            curr = curr->sibling;
+        } else if(curr->parent) {
+            curr = curr->parent->sibling;
+        } else {
+            break;
+        }
+    }
+    fprintf(fout, "-----\n");
+}
