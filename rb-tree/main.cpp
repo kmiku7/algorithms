@@ -11,14 +11,14 @@ using namespace std;
 int main(int argc, char** argv) {
 
     const int size = 15;
-    size_t items[size];
+    size_t items[size] = {15, 2, 12, 14, 6, 10, 8, 9, 5, 7, 11, 13, 3, 4, 1};
 
     unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
     for(int i=0; i<size; ++i) {
-        items[i] = i+1;
+        //items[i] = i+1;
     }
 
-    shuffle(items, items+size, std::default_random_engine(seed));
+    //shuffle(items, items+size, std::default_random_engine(seed));
 
     RBTreeNode* root = rb_create_tree();
 
@@ -30,8 +30,9 @@ int main(int argc, char** argv) {
     for(int i=0; i<size; ++i) {
         size_t value;
         printf("DELTE: %lu\n", items[i]);
-        rb_print_tree(root);
+
         rb_delete_node(root, items[i], &value);
+        rb_print_tree(root);
         rb_check_tree(root);
     }
 

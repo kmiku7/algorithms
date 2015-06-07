@@ -34,6 +34,7 @@ RBTreeNode* rb_create_tree() {
 }
 
 
+// 这里执行一遍中序的莫里斯遍历
 void rb_destroy_tree(RBTreeNode* root) {
     assert(root!=NULL);
     RBTreeNode* node = root;
@@ -203,6 +204,8 @@ bool rb_delete_node(RBTreeNode* root, size_t key, size_t* pvalue) {
     }
     
     // trivial
+    // 这个条件忽略了successor可能就是原始的node，因此左子节点也有可能非NULL
+    /*
     assert(
         (successor->color == RED && successor->left == NULL && successor->right == NULL)
         ||
@@ -211,6 +214,7 @@ bool rb_delete_node(RBTreeNode* root, size_t key, size_t* pvalue) {
             || (successor->right->color == RED 
                 && successor->right->left == NULL 
                 && successor->right->right == NULL))));
+    */
 
     if(curr != successor) {
         *pvalue = curr->value;
@@ -233,11 +237,18 @@ bool rb_delete_node(RBTreeNode* root, size_t key, size_t* pvalue) {
         free(curr);
         return true;
     } else if(curr->right) {
+        // 这里忽略了可能是curr->left非NULL。
         curr->key = curr->right->key;
         curr->value = curr->right->value;
         free(curr->right);
         curr->right = NULL;
         return true;
+    } else if(curr->left) {
+        curr->key = curr->left->key;
+        curr->value = curr->left->value;
+        free(curr->left);
+        curr->left = NULL;
+        return NULL;
     } else {
         // fix
         bool is_left_child;
@@ -290,13 +301,12 @@ bool rb_delete_node(RBTreeNode* root, size_t key, size_t* pvalue) {
 
                     if(sibling->right==NULL || sibling->right->color == BLACK) {
                         assert( sibling->left != NULL && sibling->left->color == RED);
-                        assert( sibling->left->left != NULL && sibling->left->right != NULL);
-
+                        // assert(sibling->left->left != NULL && sibling->left->right != NULL);
                         // rotate right
                         sibling->color = RED;
                         parent->right = sibling->left;
                         sibling->left = sibling->left->right;
-                        sibling->left->right = sibling;
+                        parent->right = sibling;
                         sibling = parent->right;
                         sibling->color = BLACK;
                     }
@@ -348,22 +358,25 @@ bool rb_delete_node(RBTreeNode* root, size_t key, size_t* pvalue) {
 
                     if(sibling->left == NULL || sibling->left->color == BLACK) {
                         assert(sibling->right && sibling->right->color == RED);
-                        assert(sibling->right->left && sibling->right->right);
-
+                        // 这里的本意是检查sib->right的两个节点都是黑色，但是这个黑色可能通过NULL表现出来。
+                        //assert(sibling->right->left && sibling->right->right);
+                        
+                        // 这里是要做左旋。
                         sibling->color = RED;
                         parent->left = sibling->right;
                         sibling->right = sibling->right->left;
-                        sibling->right->left = sibling;
+                        parent->left = sibling;
                         sibling = parent->left;
                         sibling->color = BLACK;
                     }
 
+                    // 这里要做一次右旋。
                     size_t parent_key = parent->key;
                     size_t parent_value = parent->value;
                     parent->key = sibling->key;
                     parent->value = sibling->value;
                     parent->left = sibling->left;
-                    parent->left->color = BLACK;
+                    //parent->left->color = BLACK;
                     sibling->left = sibling->right;
                     sibling->right = parent->right;
                     sibling->key = parent_key;
